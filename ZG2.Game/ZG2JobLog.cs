@@ -33,7 +33,7 @@ namespace ZG2
 
         public string JobId;
         public readonly List<ZG2Checkpoint> Entries = new List<ZG2Checkpoint>();
-        /// <summary>Failed departure checkpoints – only these reduce the payout.</summary>
+        /// <summary>Failed checkpoints that cost money (see CountsAsFailure).</summary>
         public int Failed;
 
         /// <summary>Penalty that was applied at validation (percent), -1 while not validated.</summary>
@@ -49,14 +49,42 @@ namespace ZG2
             JobId = jobId;
         }
 
+        /// <summary>Result of the last departure check of this job (null = none yet). Rebuilt from Entries on load.</summary>
+        private bool? lastDepartureOk;
+
+        /// <summary>
+        /// Whether a failed checkpoint costs money. A run without train end is penalised once:
+        /// a failed departure always counts; a failed arrival only if the run started with a correct
+        /// train end (boards removed or lost on the way) – after a failed departure it is only logged.
+        /// </summary>
+        private static bool CountsAsFailure(ZG2Checkpoint cp, bool? lastDepartureOk)
+        {
+            if (cp.Ok) return false;
+            if (cp.Type == ZG2CheckpointType.Departure) return true;
+            return lastDepartureOk != false;
+        }
+
         public void Add(ZG2Checkpoint cp)
         {
-            // One run without train end = one failed departure; the arrival at the end of the same run
-            // is logged but not counted again.
-            if (!cp.Ok && cp.Type == ZG2CheckpointType.Departure) Failed++;
+            if (CountsAsFailure(cp, lastDepartureOk)) Failed++;
+            if (cp.Type == ZG2CheckpointType.Departure) lastDepartureOk = cp.Ok;
             Entries.Add(cp);
             // Keep memory and packet size bounded; the failure counter stays exact.
             if (Entries.Count > MAX_ENTRIES) Entries.RemoveAt(0);
+        }
+
+        /// <summary>Replays the entries: restores the last departure result and, if wanted, the counter.</summary>
+        private void Replay(bool recount)
+        {
+            int failed = 0;
+            bool? last = null;
+            foreach (var e in Entries)
+            {
+                if (CountsAsFailure(e, last)) failed++;
+                if (e.Type == ZG2CheckpointType.Departure) last = e.Ok;
+            }
+            lastDepartureOk = last;
+            if (recount) Failed = failed;
         }
 
         public static float ComputePenaltyPercent(int failed, float perCheckpoint, float max)
@@ -135,14 +163,10 @@ namespace ZG2
                     log.Entries.Add(cp);
                 }
             }
-            // Older versions also counted failed arrivals: recount while the job is not validated yet.
-            if (log.AppliedPenaltyPercent < 0f && log.Entries.Count > 0 && log.Entries.Count < MAX_ENTRIES)
-            {
-                int failed = 0;
-                foreach (var e in log.Entries)
-                    if (!e.Ok && e.Type == ZG2CheckpointType.Departure) failed++;
-                log.Failed = failed;
-            }
+            // Earlier versions counted differently: recount while the job is not validated yet
+            // (only if no entries were dropped, otherwise the stored counter is more exact).
+            bool recount = log.AppliedPenaltyPercent < 0f && log.Entries.Count > 0 && log.Entries.Count < MAX_ENTRIES;
+            log.Replay(recount);
 
             return log;
         }

@@ -196,7 +196,7 @@ namespace ZG2
 
             // ── Penalty ──
             Header(de ? "Strafe" : "Penalty");
-            PenaltyPerCheckpoint = FloatSlider(de ? "Abzug pro fehlerhafter Ausfahrt" : "Deduction per failed departure",
+            PenaltyPerCheckpoint = FloatSlider(de ? "Abzug pro Fahrt ohne Zugschluss" : "Deduction per run without train end",
                 PenaltyPerCheckpoint, 0f, 25f, 0.5f, "0.#'%'", TipPenalty(de));
             MaxPenalty = FloatSlider(de ? "Maximaler Abzug" : "Maximum deduction", MaxPenalty, 0f, 100f, 5f, "0'%'", TipMaxPenalty(de));
 
@@ -367,8 +367,8 @@ namespace ZG2
             : "<b>Departure check</b>\nAs soon as a train carrying cars of a Zg2 job has <b>completely</b> left a station (no car left in the departure zone), the train end is checked once.\n• Failed → every job in the train gets a failed checkpoint\n• Short shunting moves out of the station trigger nothing";
 
         private string TipArrival(bool de) => de
-            ? "<b>Einfahrt-Check</b>\nSobald der erste Wagen eines solchen Zuges die Einfahrt-Zone eines Bahnhofs erreicht, wird der Zugschluss geprüft – auch am Zielbahnhof und bei Durchfahrten.\n• Entscheidend ist der Zustand <b>in diesem Moment</b>, nicht ob die Tafeln irgendwann einmal hingen\n• Wird nur ins Log (Player.log) geschrieben, <b>ohne Abzug</b> – eine Fahrt ohne Zugschluss wird nur einmal bei der Ausfahrt bestraft"
-            : "<b>Arrival check</b>\nWhen the first car of such a train reaches a station's arrival zone, the train end is checked – also at the destination and when passing through.\n• Only the state <b>at that moment</b> counts, not whether boards were mounted at some point\n• Only written to the log (Player.log), <b>no deduction</b> – a run without train end is penalised once, at departure";
+            ? "<b>Einfahrt-Check</b>\nSobald der erste Wagen eines solchen Zuges die Einfahrt-Zone eines Bahnhofs erreicht, wird der Zugschluss geprüft – auch am Zielbahnhof und bei Durchfahrten.\n• Entscheidend ist der Zustand <b>in diesem Moment</b>, nicht ob die Tafeln irgendwann einmal hingen\n• Fehlt der Zugschluss bei der Einfahrt, gibt es einen Abzug, wenn bei der Ausfahrt noch alles stimmte (Tafeln unterwegs abgenommen)\n• War schon die Ausfahrt fehlerhaft, wird die Einfahrt nur ins Log geschrieben – eine Fahrt ohne Zugschluss kostet nur einmal"
+            : "<b>Arrival check</b>\nWhen the first car of such a train reaches a station's arrival zone, the train end is checked – also at the destination and when passing through.\n• Only the state <b>at that moment</b> counts, not whether boards were mounted at some point\n• A missing train end at arrival is deducted if the departure was still correct (boards removed on the way)\n• If the departure already failed, the arrival is only logged – a run without train end costs only once";
 
         private string TipRequired(bool de) => de
             ? $"<b>Erforderliche Tafeln</b>\nGenau so viele korrekt montierte Zg2 müssen am letzten Wagen hängen.\n• Vorbild DB: 2 (links und rechts)\n• Aktuell: <b>{RequiredBoards}</b> – {RequiredBoards + 1} korrekte Tafeln zählen ebenfalls als Fehler"
@@ -390,8 +390,8 @@ namespace ZG2
         {
             string ex(int n) => $"{n} → -{ZG2JobLog.ComputePenaltyPercent(n, PenaltyPerCheckpoint, MaxPenalty):0.#}%";
             return de
-                ? $"<b>Abzug pro Fehler</b>\nJeder Job sammelt eigene Fehler bei der <b>Ausfahrt</b> (Einfahrten werden nur ins Log geschrieben). Die Auszahlung wird beim Entwerten stillschweigend reduziert (keine Einblendung) und im Auftragsbericht als eigene Zeile auf der Vergütungsseite ausgewiesen.\n• {ex(1)}   • {ex(3)}   • {ex(10)}"
-                : $"<b>Deduction per failure</b>\nEach job collects its own failed <b>departures</b> (arrivals are only written to the log). The payout is reduced silently at validation (no popup) and shown as an extra line on the payment page of the job report.\n• {ex(1)}   • {ex(3)}   • {ex(10)}";
+                ? $"<b>Abzug pro Fehler</b>\nJeder Job sammelt eigene Fehler. Pro Fahrt zählt höchstens einer: eine fehlerhafte Ausfahrt, oder eine fehlerhafte Einfahrt nach korrekter Ausfahrt. Die Auszahlung wird beim Entwerten stillschweigend reduziert (keine Einblendung) und im Auftragsbericht als eigene Zeile auf der Vergütungsseite ausgewiesen.\n• {ex(1)}   • {ex(3)}   • {ex(10)}"
+                : $"<b>Deduction per failure</b>\nEach job collects its own failures. At most one per run counts: a failed departure, or a failed arrival after a correct departure. The payout is reduced silently at validation (no popup) and shown as an extra line on the payment page of the job report.\n• {ex(1)}   • {ex(3)}   • {ex(10)}";
         }
 
         private string TipMaxPenalty(bool de) => de
